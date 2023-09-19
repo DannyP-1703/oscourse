@@ -114,6 +114,50 @@ InitGraphics (
   // Hint: Use QueryMode/SetMode functions.
   //
 
+  UINT32 PreferableHorizontalResolution = 1280U;
+  UINT32 PreferableVerticalResolution = 720U;
+  UINT32 MaxFittingMode = 0U;
+
+  for (UINT32 CurMode = 0U; CurMode < GraphicsOutput->Mode->MaxMode; ++CurMode) {
+
+    UINTN InfoSize;
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
+
+    Status = GraphicsOutput->QueryMode (
+      GraphicsOutput,
+      CurMode,
+      &InfoSize,
+      &Info
+      );
+
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_WARN, "JOS: Cannot query graphics mode - %r\n", Status));
+      break;
+    }
+
+    if (Info->HorizontalResolution <= PreferableHorizontalResolution &&
+        Info->VerticalResolution <= PreferableVerticalResolution) {
+      MaxFittingMode = CurMode;
+    }
+  }
+
+  Status = GraphicsOutput->SetMode (
+    GraphicsOutput,
+    MaxFittingMode
+    );
+
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "JOS: Cannot set required graphics mode - %r\n", Status));
+    return Status;
+  } else {
+    DEBUG ((
+      DEBUG_INFO, 
+      "JOS: Set graphics mode - %ux%u\n", 
+      GraphicsOutput->Mode->Info->HorizontalResolution,
+      GraphicsOutput->Mode->Info->VerticalResolution
+      ));
+  }
+
   //
   // Fill screen with black.
   //
@@ -270,7 +314,12 @@ GetKernelFile (
   // get loader's containing device.
   //
   // LAB 1: Your code here
-  (void)LoadedImage;
+
+  Status = gBS->HandleProtocol(
+    gImageHandle,
+    &gEfiLoadedImageProtocolGuid,
+    (VOID **) &LoadedImage
+    );
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot find LoadedImage protocol - %r\n", Status));
@@ -288,7 +337,12 @@ GetKernelFile (
   // to read the kernel from it later.
   //
   // LAB 1: Your code here
-  (void)FileSystem;
+
+  Status = gBS->HandleProtocol(
+    LoadedImage->DeviceHandle,
+    &gEfiSimpleFileSystemProtocolGuid,
+    (VOID **) &FileSystem
+    );
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot find own FileSystem protocol - %r\n", Status));
@@ -300,7 +354,11 @@ GetKernelFile (
   // NOTE: Don't forget to Use ->Close after you've done using it.
   //
   // LAB 1: Your code here
-  (void)CurrentDriveRoot;
+
+  Status = FileSystem->OpenVolume(
+    FileSystem,
+    &CurrentDriveRoot
+    );
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot access own file system - %r\n", Status));
@@ -312,7 +370,16 @@ GetKernelFile (
   // for reading (as EFI_FILE_MODE_READ)
   //
   // LAB 1: Your code here
-  KernelFile = NULL;
+
+  Status = CurrentDriveRoot->Open(
+    CurrentDriveRoot,
+    &KernelFile,
+    KERNEL_PATH,
+    EFI_FILE_MODE_READ,
+    0
+    );
+
+  CurrentDriveRoot->Close(CurrentDriveRoot);
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot access own file system - %r\n", Status));
@@ -982,7 +1049,7 @@ UefiMain (
   UINTN              EntryPoint;
   VOID               *GateData;
 
-#if 1 ///< Uncomment to await debugging
+#if 0 ///< Uncomment to await debugging
   volatile BOOLEAN   Connected;
   DEBUG ((DEBUG_INFO, "JOS: Awaiting debugger connection\n"));
 
