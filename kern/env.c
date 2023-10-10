@@ -6,6 +6,7 @@
 #include <inc/string.h>
 #include <inc/assert.h>
 #include <inc/elf.h>
+#include <inc/dwarf.h>
 
 #include <kern/env.h>
 #include <kern/trap.h>
@@ -215,7 +216,9 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
         if (ELF64_ST_BIND(symtab[i].st_info) == STB_GLOBAL && ELF64_ST_TYPE(symtab[i].st_info) == STT_OBJECT) {
             uintptr_t addr = find_function(strtab + symtab[i].st_name);
             if (addr && image_start <= symtab[i].st_value && symtab[i].st_value <= image_end) {
-                *((uintptr_t *) symtab[i].st_value) = addr;
+                //*((uintptr_t *) symtab[i].st_value) = addr;
+                put_unaligned((uintptr_t *)addr, (UINT64 *)symtab[i].st_value);
+                //cprintf("Binding symblol (%s) having reference at %lx located at %lx\n", strtab + symtab[i].st_name, symtab[i].st_value, addr);
             }
         }
     }

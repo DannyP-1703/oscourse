@@ -95,7 +95,6 @@ trapname(int trapno) {
 void
 trap_init(void) {
     // LAB 4: Your code here
-
     /* Per-CPU setup */
     trap_init_percpu();
 }
