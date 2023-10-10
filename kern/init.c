@@ -111,8 +111,6 @@ i386_init(void) {
     fb_init();
     if (trace_init) cprintf("Framebuffer initialised\n");
 
-    assert(false);
-
     trap_init();
 
     /* User environment initialization functions */

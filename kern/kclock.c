@@ -46,6 +46,7 @@ void
 rtc_timer_pic_interrupt(void) {
     // LAB 4: Your code here
     // Enable PIC interrupts.
+    pic_irq_unmask(IRQ_CLOCK);
 }
 
 void
@@ -58,8 +59,10 @@ void
 rtc_timer_init(void) {
     // LAB 4: Your code here
     // (use cmos_read8()/cmos_write8())
-    uint8_t reg_b = cmos_read8(RTC_BREG);
-    cmos_write8(RTC_BREG, reg_b | RTC_PIE);
+    uint8_t reg = cmos_read8(RTC_BREG);
+    cmos_write8(RTC_BREG, reg | RTC_PIE);
+    reg = cmos_read8(RTC_AREG);
+    cmos_write8(RTC_AREG, reg | 0xF);
 }
 
 uint8_t
