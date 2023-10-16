@@ -1,5 +1,4 @@
 /* See COPYRIGHT for copyright information. */
-
 #include <inc/x86.h>
 #include <inc/mmu.h>
 #include <inc/error.h>
@@ -190,32 +189,80 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
     // LAB 3: Your code here:
 
     /* NOTE: find_function from kdebug.c should be used */
-
+    size_t buf_size;
     struct Elf *elf = (struct Elf *) binary;
-    struct Secthdr *sh_table = (struct Secthdr *) (binary + elf->e_shoff);
-    char *shstr = (char *) binary + sh_table[elf->e_shstrndx].sh_offset;
-   
-    UINT16 indx_sh_strtab = 0;
-    for (UINT16 i = 0; i < elf->e_shnum; ++i) {
-        if (sh_table[i].sh_type == ELF_SHT_STRTAB && !strcmp(shstr + sh_table[i].sh_name, ".strtab"))  {
-            indx_sh_strtab = i;
-        }
-    }
-    char *strtab = (char *) binary + sh_table[indx_sh_strtab].sh_offset;
 
+    if (elf->e_shoff > size) {
+        panic("Corrupted Elf\n");
+    }
+    
+    struct Secthdr *sh_table = (struct Secthdr *) (binary + elf->e_shoff);
+
+    if (__builtin_uaddl_overflow(elf->e_shoff, (size_t) elf->e_shnum * sizeof(struct Secthdr), &buf_size) || buf_size > size) {
+        panic("Corrupted Elf\n");
+    }
+
+    UINT64 sh_str_off = sh_table[elf->e_shstrndx].sh_offset;
+    
+    if (sh_str_off > size) {
+         panic("Corrupted Elf\n");
+    }
+    
+    char *shstr = (char *) (binary + sh_str_off);
+    UINT64 sh_str_size = sh_table[elf->e_shstrndx].sh_size;
+
+    if (__builtin_uaddl_overflow(sh_str_off, sh_str_size, &buf_size) || buf_size > size) {
+        panic("Corrupted Elf\n");
+    }
+
+    UINT16 indx_sh_strtab = 0;
     UINT16 indx_sh_symtab = 0;
     for (UINT16 i = 0; i < elf->e_shnum; ++i) {
-        if (sh_table[i].sh_type == ELF_SHT_SYMTAB && !strcmp(shstr + sh_table[i].sh_name, ".symtab")) {
+        if (sh_table[i].sh_name > sh_str_size) {
+            panic("Corrupted Elf\n");
+        }
+        if (sh_table[i].sh_type == ELF_SHT_STRTAB && !strncmp(shstr + sh_table[i].sh_name, ".strtab", sh_str_size - sh_table[i].sh_name))  {
+            indx_sh_strtab = i;
+        }
+        if (sh_table[i].sh_type == ELF_SHT_SYMTAB && !strncmp(shstr + sh_table[i].sh_name, ".symtab", sh_str_size - sh_table[i].sh_name)) {
             indx_sh_symtab = i;
         }
     }
-    struct Elf64_Sym *symtab = (struct Elf64_Sym *) (binary + sh_table[indx_sh_symtab].sh_offset);
 
+    UINT64 strtab_off = sh_table[indx_sh_strtab].sh_offset;
+
+    if (strtab_off > size) {
+        panic("Corrupted Elf\n");
+    }
+
+    char *strtab = (char *) (binary + strtab_off);
+    UINT64 strtab_size = sh_table[indx_sh_strtab].sh_size;
+
+    if (__builtin_uaddl_overflow(strtab_off, strtab_size, &buf_size) || buf_size > size) {
+        panic("Corrupted Elf\n");
+    }
+
+    UINT64 symtab_off = sh_table[indx_sh_symtab].sh_offset;
+
+    if (symtab_off > size) {
+        panic("Corrupted Elf\n");
+    }
+
+    struct Elf64_Sym *symtab = (struct Elf64_Sym *) (binary + symtab_off);
+    UINT64 symtab_size = sh_table[indx_sh_symtab].sh_size;
     size_t nsym = sh_table[indx_sh_symtab].sh_size / sizeof(*symtab);
+
+    if (__builtin_uaddl_overflow(symtab_off, symtab_size, &buf_size) || buf_size > size) {
+        panic("Corrupted Elf\n");
+    }
+
     for (size_t i = 0; i < nsym; ++i) {
         if (ELF64_ST_BIND(symtab[i].st_info) == STB_GLOBAL && ELF64_ST_TYPE(symtab[i].st_info) == STT_OBJECT) {
+            if (symtab[i].st_name > strtab_size) {
+                panic("Corrupted Elf\n");
+            }
             uintptr_t addr = find_function(strtab + symtab[i].st_name);
-            if (addr && image_start <= symtab[i].st_value && symtab[i].st_value <= image_end) {
+            if (addr && symtab[i].st_size >= sizeof(uintptr_t) && image_start <= symtab[i].st_value && symtab[i].st_value <= image_end - sizeof(uintptr_t)) {
                 //*((uintptr_t *) symtab[i].st_value) = addr;
                 put_unaligned((uintptr_t *)addr, (UINT64 *)symtab[i].st_value);
                 //cprintf("Binding symblol (%s) having reference at %lx located at %lx\n", strtab + symtab[i].st_name, symtab[i].st_value, addr);
