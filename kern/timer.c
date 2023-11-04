@@ -172,7 +172,10 @@ get_fadt(void) {
     // (use acpi_find_table)
     // HINT: ACPI table signatures are
     //       not always as their names
-    FADT *fadt = acpi_find_table("FACP");
+    static FADT *fadt;
+    if (!fadt) {
+        fadt = acpi_find_table("FACP");
+    } 
     if (!fadt) {
         panic("FADT not found\n");
     }
@@ -184,7 +187,10 @@ HPET *
 get_hpet(void) {
     // LAB 5: Your code here
     // (use acpi_find_table)
-    HPET * hpet = acpi_find_table("HPET");
+    static HPET * hpet;
+    if (!hpet) {
+        hpet = acpi_find_table("HPET");
+    }
     if (!hpet) {
         panic("HPET not found\n");
     }
@@ -294,8 +300,6 @@ hpet_enable_interrupts_tim0(void) {
     hpetReg->TIM0_COMP = hpet_get_main_cnt() + hpetFreq / 2;
     hpetReg->TIM0_COMP = hpetFreq / 2;
     pic_irq_unmask(IRQ_TIMER);
-
-    hpet_print_reg();
 }
 
 void
@@ -368,15 +372,16 @@ pmtimer_cpu_frequency(void) {
         uint64_t cur_tick;
         uint64_t start_tsc = read_tsc();
         uint64_t end_tsc;
+        uint64_t timer_length = get_fadt()->PMTimerLength;
 
         do {
             asm("pause");
             cur_tick = pmtimer_get_timeval();
             if (start_tick <= cur_tick) {
                 delta = cur_tick - start_tick;
-            } else if (fadt->PMTimerLength == 3) {           
+            } else if (timer_length == 3) {           
                 delta = 0x00FFFFFF - start_tick + cur_tick;  // 24bit
-            } else if (fadt->PMTimerLength == 4) {                                                    
+            } else if (timer_length == 4) {                                                    
                 delta = 0xFFFFFFFF - start_tick + cur_tick;  // 32bit
             } else {
                 panic("Unsupported PM timer register length\n");
