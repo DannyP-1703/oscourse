@@ -291,8 +291,8 @@ hpet_enable_interrupts_tim0(void) {
     // LAB 5: Your code here
     hpetReg->GEN_CONF |= HPET_LEG_RT_CNF;
     hpetReg->TIM0_CONF = HPET_TN_INT_ENB_CNF | HPET_TN_TYPE_CNF | HPET_TN_VAL_SET_CNF | (IRQ_TIMER << 9);
-    hpetReg->TIM0_COMP = hpet_get_main_cnt() + hpetFreq / 10000;
-    hpetReg->TIM0_COMP = hpetFreq / 10000;
+    hpetReg->TIM0_COMP = hpet_get_main_cnt() + hpetFreq / 2;
+    hpetReg->TIM0_COMP = hpetFreq / 2;
     pic_irq_unmask(IRQ_TIMER);
 
     hpet_print_reg();
@@ -374,10 +374,12 @@ pmtimer_cpu_frequency(void) {
             cur_tick = pmtimer_get_timeval();
             if (start_tick <= cur_tick) {
                 delta = cur_tick - start_tick;
-            } else if (start_tick - cur_tick <= 0x00FFFFFF) {
+            } else if (fadt->PMTimerLength == 3) {           
                 delta = 0x00FFFFFF - start_tick + cur_tick;  // 24bit
-            } else {
+            } else if (fadt->PMTimerLength == 4) {                                                    
                 delta = 0xFFFFFFFF - start_tick + cur_tick;  // 32bit
+            } else {
+                panic("Unsupported PM timer register length\n");
             }
         } while (delta < end_tick);
         end_tsc = read_tsc();
