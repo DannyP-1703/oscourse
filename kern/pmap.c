@@ -83,6 +83,15 @@ list_init(struct List *list) {
 inline static void __attribute__((always_inline))
 list_append(struct List *list, struct List *new) {
     // LAB 6: Your code here
+    assert(list);
+    assert(new);
+
+    new->prev = list;
+    new->next = list->next;
+    
+    list->next->prev = new;
+    list->next = new;
+    
 }
 
 /*
@@ -92,7 +101,12 @@ list_append(struct List *list, struct List *new) {
 inline static struct List *__attribute__((always_inline))
 list_del(struct List *list) {
     // LAB 6: Your code here
-
+    assert(list);
+    
+    list->prev->next = list->next;
+    list->next->prev = list->prev;
+    
+    list_init(list);
     return list;
 }
 
@@ -174,9 +188,25 @@ alloc_child(struct Page *parent, bool right) {
 
     // LAB 6: Your code here
 
-    struct Page *new = NULL;
+    if (parent->class == 0) {
+        return NULL;
+    }
 
-    return new;
+    struct Page *child = alloc_descriptor(parent->state);
+    child->parent = parent;
+
+    child->class = parent->class - 1;
+    child->addr = parent->addr;
+    if (right) {
+        parent->right = child;
+        child->addr += (1ULL << child->class);
+    } else {
+        parent->left = child;
+    }
+    if (parent->refc) {
+        child->refc = 1;
+    }
+    return child;
 }
 
 
@@ -305,15 +335,30 @@ static void
 attach_region(uintptr_t start, uintptr_t end, enum PageState type) {
     if (trace_memory_more)
         cprintf("Attaching memory region [%08lX, %08lX] with type %d\n", start, end - 1, type);
-    int class = 0, res = 0;
-
-    (void)class;
-    (void)res;
+    int class = 0;
+    //int res = 0;
 
     start = ROUNDDOWN(start, CLASS_SIZE(0));
     end = ROUNDUP(end, CLASS_SIZE(0));
 
     // LAB 6: Your code here
+    while (start < end) {
+        for (class = 0; class < MAX_CLASS; class++) {       //max class so start is alligned
+            if (start & CLASS_MASK(class)) {
+                class--;
+                break;
+            }
+            if (page_lookup(NULL, start, class, ALLOCATABLE_NODE, 0))
+                break;
+        }
+
+        while (CLASS_SIZE(class) > end - start) {       // max class fitting inside region
+            class--;
+        }
+
+        page_lookup(NULL, start, class, type, 1);
+        start += CLASS_SIZE(class);
+    }
 }
 
 /*
@@ -424,6 +469,36 @@ dump_virtual_tree(struct Page *node, int class) {
 void
 dump_memory_lists(void) {
     // LAB 6: Your code here
+    struct List *li = NULL;
+    uint64_t total_free_memory = 0;
+
+    cprintf("Free pages:\n");
+    cprintf("Class\t\tPage adresses\n");
+    for (int class = 0; class < MAX_CLASS; class++, li = NULL) {
+        if (free_classes[class].next == &free_classes[class]) {
+            continue;
+        }
+        cprintf("%3d\t", class);
+
+        int i = 0;
+        for (li = free_classes[class].next; li != &free_classes[class]; li = li->next, i++) {
+            cprintf("%08lx ", (unsigned long) page2pa((struct Page *) li));
+            if ((i + 1) % 8 == 0)
+                cprintf("\n   \t");
+        }
+        total_free_memory += i * CLASS_SIZE(class);
+        cprintf("\n\n");
+    }
+
+    cprintf("Free memory size: %llu KB\n", total_free_memory / KB);
+}
+
+
+void
+test_memory_allocation(void) {
+    struct Page *first = alloc_page(0, ALLOC_POOL);
+    while (alloc_page(0, ALLOC_POOL));
+    page_unref(first);
 }
 
 
@@ -522,11 +597,13 @@ detect_memory(void) {
 
     /* Attach first page as reserved memory */
     // LAB 6: Your code here
+    attach_region(0, CLASS_SIZE(0), RESERVED_NODE);
 
     /* Attach kernel and old IO memory
      * (from IOPHYSMEM to the physical address of end label. end points the the
      *  end of kernel executable image.)*/
     // LAB 6: Your code here
+    attach_region(IOPHYSMEM, (uintptr_t)end - KERN_BASE_ADDR, RESERVED_NODE);
 
     /* Detect memory via ether UEFI or CMOS */
     if (uefi_lp && uefi_lp->MemoryMap) {
@@ -554,7 +631,9 @@ detect_memory(void) {
             /* Attach memory described by memory map entry described by start
              * of type type*/
             // LAB 6: Your code here
-            (void)type;
+            uintptr_t start_pa = start->PhysicalStart;
+            uintptr_t end_pa = start->PhysicalStart + start->NumberOfPages * EFI_PAGE_SIZE;
+            attach_region(start_pa, end_pa, type);
 
             start = (void *)((uint8_t *)start + uefi_lp->MemoryMapDescriptorSize);
         }
