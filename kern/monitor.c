@@ -142,12 +142,14 @@ mon_memory(int argc, char **argv, struct Trapframe *tf) {
 int
 mon_pagetable(int argc, char **argv, struct Trapframe *tf) {
     // LAB 7: Your code here
+    dump_page_table(pml4);
     return 0;
 }
 
 int
 mon_virt(int argc, char **argv, struct Trapframe *tf) {
     // LAB 7: Your code here
+    dump_virtual_tree();
     return 0;
 }
 
