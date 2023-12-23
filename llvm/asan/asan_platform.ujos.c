@@ -44,6 +44,8 @@ extern uint8_t __bss_end;
 extern uint8_t __text_start;
 extern uint8_t __text_end;
 
+extern struct Env *curenv;
+
 void
         NORETURN
         _panic(const char *file, int line, const char *fmt, ...);
@@ -68,8 +70,12 @@ platform_abort() {
 static bool
 asan_shadow_allocator(struct UTrapframe *utf) {
     // LAB 9: Your code here
-    (void)utf;
-    return 1;
+    if (!((uint64_t) asan_internal_shadow_start <= utf->utf_fault_va && 
+        (uint64_t) asan_internal_shadow_end >= utf->utf_fault_va))
+        return 0;
+
+    sys_alloc_region(curenv->env_id, (void *) utf->utf_fault_va, SHADOW_STEP, ALLOC_ONE);
+    return 0;
 }
 #endif
 
@@ -96,6 +102,7 @@ static int
 asan_unpoison_shared_region(void *start, void *end, void *arg) {
     (void)start, (void)end, (void)arg;
     // LAB 8: Your code here
+    platform_asan_unpoison(start, end - start);
     return 0;
 }
 
@@ -133,7 +140,7 @@ platform_asan_init(void) {
     /* 4. Shared pages
      * HINT: Use foreach_shared_region() with asan_unpoison_shared_region() */
     // LAB 8: Your code here
-    
+    foreach_shared_region(asan_unpoison_shared_region, 0);
     // TODO NOTE: LAB 11 code may be here
 }
 
