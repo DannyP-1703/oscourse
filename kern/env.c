@@ -94,13 +94,19 @@ env_init(void) {
      * Don't forget about rounding.
      * kzalloc_region() only works with current_space != NULL */
     // LAB 8: Your code here
-
+    envs = kzalloc_region(NENV * sizeof(*envs));
+    memset(envs, 0, ROUNDUP(NENV * sizeof(*envs), PAGE_SIZE));
     /* Map envs to UENVS read-only,
      * but user-accessible (with PROT_USER_ set) */
     // LAB 8: Your code here
-
+    map_region(current_space, UENVS, &kspace, (uintptr_t)envs, UENVS_SIZE, PROT_R | PROT_USER_);
     /* Set up envs array */
-
+    env_free_list = &envs[0];
+    for (size_t i = 0; i < NENV - 1; i++) {
+        envs[i].env_link = &envs[i + 1];
+    }
+    
+    /*
     // LAB 3: Your code here
 
     for (size_t i = 0; i < NENV; ++i) {
@@ -113,6 +119,7 @@ env_init(void) {
         }
     }
     env_free_list = &envs[0];
+    */
 }
 
 /* Allocates and initializes a new environment.
@@ -331,6 +338,7 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
  *   What?  (See env_run() and env_pop_tf() below.) */
 static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
+    // LAB 8: Your code here
     struct Elf *elf = (struct Elf *) binary;
 
     // Incorrect magic
@@ -352,9 +360,12 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     if (elf->e_phentsize != sizeof (struct Proghdr)) {
         return -E_INVALID_EXE;
     }
-
+#ifdef CONFIG_KSPACE
     uintptr_t image_start = (uintptr_t) -1;
     uintptr_t image_end = 0;
+#endif
+
+    switch_address_space(&env->address_space);
 
     struct Proghdr *ph_table = (struct Proghdr *)(binary + elf->e_phoff);
     for (UINT16 i = 0; i < elf->e_phnum; ++i) {
@@ -370,12 +381,17 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
         void *dst = (void *) ph->p_va;
         void *src = (void *) (binary + ph->p_offset);
 
+#ifdef CONFIG_KSPACE
         if ((uintptr_t) dst < image_start) {
             image_start = (uintptr_t) dst;
         }
 
         if (image_end < (uintptr_t)(dst + ph->p_memsz))
             image_end = (uintptr_t)(dst + ph->p_memsz);
+#endif
+        
+        map_region(&env->address_space, ROUNDDOWN((uintptr_t) dst, PAGE_SIZE),
+            NULL, 0, ROUNDUP((uintptr_t)ph->p_memsz, PAGE_SIZE), PROT_RWX | PROT_USER_ | ALLOC_ZERO);
 
         memcpy(dst, src, ph->p_filesz);
 
@@ -383,10 +399,16 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
         memset(dst, 0, ph->p_memsz - ph->p_filesz);
     }
 
-    env->env_tf.tf_rip = elf->e_entry;
+    map_region(&env->address_space, USER_STACK_TOP - USER_STACK_SIZE,
+        NULL, 0, USER_STACK_SIZE, PROT_R | PROT_W | PROT_USER_ | ALLOC_ZERO);
 
+    switch_address_space(&env->address_space);
+
+    env->env_tf.tf_rip = elf->e_entry;
+#ifdef CONFIG_KSPACE
     bind_functions(env, binary, size, image_start, image_end);
-    // LAB 8: Your code here
+#endif
+
     return 0;
 }
 
@@ -399,7 +421,7 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 3: Your code here
-
+    // LAB 8: Your code here
     struct Env *newenv;
     int status = env_alloc(&newenv, 0, type);
     if (status < 0) {
@@ -407,12 +429,13 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
     }
 
     newenv->env_type = type;
+    newenv->binary = binary;
 
     status = load_icode(newenv, binary, size);
     if (status < 0) {
         panic("Couldn't load a program: %i", status);
     }
-    // LAB 8: Your code here
+    
 }
 
 
@@ -461,6 +484,7 @@ env_destroy(struct Env *env) {
     /* Reset in_page_fault flags in case *current* environment
      * is getting destroyed after performing invalid memory access. */
     // LAB 8: Your code here
+    in_page_fault = 0;
 }
 
 #ifdef CONFIG_KSPACE
@@ -544,16 +568,20 @@ env_run(struct Env *env) {
     }
 
     // LAB 3: Your code here
+    // LAB 8: Your code here
 
     if (curenv && curenv->env_status == ENV_RUNNING) {
         curenv->env_status = ENV_RUNNABLE;
     }
 
+    if (env->env_status != ENV_RUNNABLE)
+        panic("Scheduled process is not runnable");
+
     curenv = env;
     curenv->env_status = ENV_RUNNING;
     curenv->env_runs++;
+    switch_address_space(&curenv->address_space);
     env_pop_tf(&curenv->env_tf);
-    // LAB 8: Your code here
 
     while (1)
         ;
