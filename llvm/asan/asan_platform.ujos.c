@@ -44,8 +44,6 @@ extern uint8_t __bss_end;
 extern uint8_t __text_start;
 extern uint8_t __text_end;
 
-extern struct Env *curenv;
-
 void
         NORETURN
         _panic(const char *file, int line, const char *fmt, ...);
@@ -70,11 +68,10 @@ platform_abort() {
 static bool
 asan_shadow_allocator(struct UTrapframe *utf) {
     // LAB 9: Your code here
-    if (!((uint64_t) asan_internal_shadow_start <= utf->utf_fault_va && 
-        (uint64_t) asan_internal_shadow_end >= utf->utf_fault_va))
+    if (!SHADOW_ADDRESS_VALID((void *) utf->utf_fault_va))
         return 0;
 
-    sys_alloc_region(curenv->env_id, (void *) utf->utf_fault_va, SHADOW_STEP, ALLOC_ONE);
+    sys_alloc_region(sys_getenvid(), (void *) utf->utf_fault_va, SHADOW_STEP, ALLOC_ONE);
     return 0;
 }
 #endif
