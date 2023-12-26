@@ -137,7 +137,7 @@ platform_asan_init(void) {
     /* 4. Shared pages
      * HINT: Use foreach_shared_region() with asan_unpoison_shared_region() */
     // LAB 8: Your code here
-    foreach_shared_region(asan_unpoison_shared_region, 0);
+    foreach_shared_region(asan_unpoison_shared_region, NULL);
     // TODO NOTE: LAB 11 code may be here
 }
 
