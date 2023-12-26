@@ -310,6 +310,7 @@ trap_dispatch(struct Trapframe *tf) {
             print_trapframe(tf);
         }
         timer_for_schedule->handle_interrupts();
+        vsys[VSYS_gettime] = gettime();
         sched_yield();
         return;
         // LAB 11: Your code here
