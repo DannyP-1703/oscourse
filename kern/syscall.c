@@ -178,7 +178,7 @@ sys_alloc_region(envid_t envid, uintptr_t addr, size_t size, int perm) {
     struct Env* env;
     if (envid2env(envid, &env, 1))
         return -E_BAD_ENV;
-    if (CLASS_MASK(0) & addr || addr > MAX_USER_ADDRESS || perm & ~PROT_ALL)
+    if (PAGE_OFFSET(addr) || addr > MAX_USER_ADDRESS || perm & ~(PROT_ALL))
         return -E_INVAL;
 
     perm |= PROT_LAZY | PROT_USER_;
@@ -220,9 +220,9 @@ sys_map_region(envid_t srcenvid, uintptr_t srcva,
     if (envid2env(srcenvid, &srcenv, 1) || envid2env(dstenvid, &dstenv, 1))
         return -E_BAD_ENV;
 
-    if (CLASS_MASK(0) & srcva || CLASS_MASK(0) & dstva ||
+    if (PAGE_OFFSET(srcva) || PAGE_OFFSET(dstva) ||
         srcva >= MAX_USER_ADDRESS || dstva >= MAX_USER_ADDRESS ||
-        perm & ~PROT_ALL || perm & ALLOC_ZERO || perm & ALLOC_ONE)
+        perm & ~PROT_ALL)
         return -E_INVAL;
 
     perm |= PROT_USER_;
@@ -246,7 +246,7 @@ sys_unmap_region(envid_t envid, uintptr_t va, size_t size) {
     struct Env* env;
     if (envid2env(envid, &env, 1))
         return -E_BAD_ENV;
-    if (CLASS_MASK(0) & va || va >= MAX_USER_ADDRESS)
+    if (PAGE_OFFSET(va) || va >= MAX_USER_ADDRESS)
         return -E_INVAL;
 
     unmap_region(&env->address_space, va, size);
@@ -398,7 +398,7 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf) {
     if (envid2env(envid, &env, 0))
         return -E_BAD_ENV;
 
-    user_mem_assert(curenv, tf, sizeof(*tf), PROT_R | PROT_USER_);
+    user_mem_assert(curenv, tf, sizeof(*tf), PROT_R);
 
     nosan_memcpy(&env->env_tf, tf, sizeof(*tf));
     env->env_tf.tf_ds = GD_UD | 3;

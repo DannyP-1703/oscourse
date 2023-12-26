@@ -287,11 +287,17 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
     /* Map read section conents to child */
     /* Unmap it from parent */
 
-    if (memsz > filesz && 
-        (res = sys_alloc_region(child, (void *)ROUNDUP(va + filesz, PAGE_SIZE), memsz, perm)))
-        return res;
+    if (filesz > HUGE_PAGE_SIZE || filesz > memsz)
+        return -E_INVALID_EXE;
 
-    if ((res = sys_alloc_region(CURENVID, UTEMP, ROUNDUP(filesz, PAGE_SIZE), PTE_P | PTE_U | PTE_W)))
+    if (memsz > filesz && 
+        (res = sys_alloc_region(child, (void *)va + ROUNDUP(filesz, PAGE_SIZE), ROUNDUP(memsz - filesz, PAGE_SIZE), perm))) {
+        return res;
+    }
+
+    if (filesz == 0)
+        return 0;
+    if ((res = sys_alloc_region(CURENVID, UTEMP, ROUNDUP(filesz, PAGE_SIZE), PTE_U | PTE_W | PTE_P)))
         return res;
 
     if ((res = seek(fd, fileoffset)))
@@ -299,11 +305,12 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
 
     if ((res = readn(fd, UTEMP, filesz)) < 0)
         return res;
-
-    if ((res = sys_map_region(CURENVID, UTEMP, child, (void *)va, ROUNDUP(filesz, PAGE_SIZE), perm)))
+        
+    if ((res = sys_map_region(CURENVID, UTEMP, child, (void *)va, filesz, perm)))
         return res;
 
     if ((res = sys_unmap_region(CURENVID, UTEMP, ROUNDUP(filesz, PAGE_SIZE))))
         return res;
+
     return 0;
 }
