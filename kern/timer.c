@@ -135,7 +135,9 @@ acpi_find_table(const char *sign) {
         }
 
         rsdt = mmio_map_region(rsdt_pa, sizeof(*rsdt));
-        rsdt = mmio_remap_last_region(rsdt_pa, rsdt, sizeof(*rsdt), rsdt->h.Length);
+        rsdt = mmio_remap_last_region(rsdt_pa, (void *) rsdt, sizeof(*rsdt), rsdt->h.Length);
+
+        //cprintf("RSDT len %u\n", rsdt->h.Length);
 
         for (uint32_t i = 0; i < rsdt->h.Length; i++) {
             checksum += ((uint8_t *) rsdt)[i];
@@ -145,12 +147,11 @@ acpi_find_table(const char *sign) {
         }
         rsdt_entries = (rsdt->h.Length - sizeof(rsdt->h)) / (rsdp->Revision == 0 ? 4 : 8);
     }
+    
 
     for (size_t i = 0; i < rsdt_entries; i++) {
-        physaddr_t sdt_header_pa = rsdt->PointerToOtherSDT[i];
-        ACPISDTHeader *sdt_header;
-
-        sdt_header = mmio_map_region(sdt_header_pa, sizeof(*sdt_header));
+        physaddr_t sdt_header_pa = ((physaddr_t *) rsdt->PointerToOtherSDT)[i];
+        ACPISDTHeader *sdt_header = mmio_map_region(sdt_header_pa, sizeof(*sdt_header));
         sdt_header = mmio_remap_last_region(sdt_header_pa, sdt_header, sizeof(*sdt_header), sdt_header->Length);
 
         // Validation

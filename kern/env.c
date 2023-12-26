@@ -454,7 +454,10 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
     if (status < 0) {
         panic("Couldn't load a program: %i", status);
     }
-    
+
+    if (type == ENV_TYPE_FS) {
+        newenv->env_tf.tf_rflags |= FL_IOPL_3;
+    }
 }
 
 
